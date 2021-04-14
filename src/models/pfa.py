@@ -192,13 +192,19 @@ if __name__ == '__main__':
     document = tf.transpose(document, [1, 0])
     assert document.shape == (n, vocab_size)
 
+
     hparams = {'c0': 1.,
                'e0': 1.,
                'f0': 0.001,
                }
-
     pfa = PFAHMCSampler(vocab_size, num_topic, hparams)
-    pfa.sample_states(document, n_states=500, )
+
+    n_states = 1000
+    n_burnin = 1000
+    pfa.sample_states(document,
+                      n_states=n_states,
+                      n_burnin=n_burnin,
+                      step_size=0.01)
 
     draw_samples = pfa.predict()
     pred_low, pred_high = np.quantile(draw_samples, [0.025, 0.975], axis=0)
