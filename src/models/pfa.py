@@ -16,7 +16,13 @@ class PFAHMCSampler:
     param_names = ['gamma0', 'gamma', 'theta', 'phi']
 
     def __init__(self, vocab_size, num_topic, hparam, seed=1, ):
+        self.num_topic = num_topic
+        self.vocab_size = vocab_size
+        self.set_hparam(hparam)
+        self.seed = seed
+        self.init__model()
 
+    def init__model(self):
         # Training states
         self.states = None
         self.n_states = None
@@ -26,37 +32,21 @@ class PFAHMCSampler:
         self._essr = None
         self.document = None
 
-        self.num_topic = num_topic
-        self.vocab_size = vocab_size
-        self.set_hparam(hparam)
-        self.seed = seed
-
     def set_data(self, document):
         assert document.shape[1] == self.vocab_size
         self.document = document
 
     def store_states(self, states):
         assert len(states) == len(PFAHMCSampler.param_names)
-        self.states = { }
+        self.states = {}
         for idx, param_name in enumerate(PFAHMCSampler.param_names):
             self.states[param_name] = states[idx]
 
     def set_hparam(self, hparam):
-        self.hparam = { }
-
-        self.hparam['c0'] = tf.Variable(hparam['c0'], name='c0')
-        self.hparam['e0'] = tf.Variable(hparam['e0'], name='e0')
-        self.hparam['f0'] = tf.Variable(hparam['f0'], name='f0')
-        self.hparam['pn'] = tf.Variable(hparam.get('pn', .5), name='pn')
-
-        if 'alpha_vec' not in hparam:
-            hparam['alpha_vec'] = np.full((self.vocab_size,), 10.)
-        else:
-            assert hparam['alpha_vec'].shape == (self.vocab_size,)
-
-        hparam['alpha_vec'] = hparam['alpha_vec'].astype(np.float32)
-        self.hparam['alpha_vec'] = tf.Variable(hparam['alpha_vec'],
-                                               name='alpha_vec')
+        self.hparam = {}
+        for k, v in hparam.items():
+            v = v.astype(np.float32) if isinstance(v, np.ndarray) else float(v)
+            self.hparam[k] = tf.Variable(v, name=k)
 
     def init_states(self):
         assert self.document is not None
@@ -145,7 +135,6 @@ class PFAHMCSampler:
                 rate=tf.matmul(self.states['theta'], self.states['phi'], adjoint_a=True)).sample()
 
 
-
 def generate_data():
     e0 = 1
     f0 = 0.001
@@ -155,12 +144,11 @@ def generate_data():
 
     alpha_vec = tf.fill((vocab_size,), value=1.01)
     alpha_vec = np.cumsum(alpha_vec) / 5.
-    # alpha_vec = alpha_vec / alpha_vec.sum()
+
     succ = False
     for _ in range(1000):
         phi = tfd.Dirichlet(tfp.util.TransformedVariable(alpha_vec, tfb.Softplus())).sample(
             (n_chain, num_topic))
-        # phi = tf.transpose(phi, [0, 1, 2])
         assert phi.shape[1:] == (num_topic, vocab_size)
 
         gamma0 = tfd.Gamma(concentration=e0, rate=f0).sample((n_chain,))
@@ -199,6 +187,8 @@ if __name__ == '__main__':
     hparams = {'c0': 1.,
                'e0': 1.,
                'f0': 0.001,
+               'pn': 0.5,
+               'alpha_vec': np.full((vocab_size, ), 10.),
                }
     pfa = PFAHMCSampler(vocab_size, num_topic, hparams)
 
