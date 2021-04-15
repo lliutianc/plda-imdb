@@ -160,38 +160,55 @@ class PFAHMCSampler:
                 rate=tf.matmul(self.states['theta'], self.states['phi'], adjoint_a=True)).sample()
 
 
-if __name__ == '__main__':
-    num_topic = 5
-    vocab_size = 100
-    n_chain = 3
-    n = 50
 
+def generate_data():
     e0 = 1
-    f0 = 0.01
+    f0 = 0.001
     c0 = 1.
     pn = 0.8
 
     alpha_vec = tf.fill((vocab_size,), value=1.01)
-    alpha_vec = np.cumsum(alpha_vec) / 5
-    phi = tfd.Dirichlet(tfp.util.TransformedVariable(alpha_vec, tfb.Softplus())).sample(
-        (n_chain, num_topic))
-    assert phi.shape[1:] == (num_topic, vocab_size)
+    alpha_vec = np.cumsum(alpha_vec) / 5.
+    # alpha_vec = alpha_vec / alpha_vec.sum()
+    succ = False
+    for _ in range(1000):
+        phi = tfd.Dirichlet(tfp.util.TransformedVariable(alpha_vec, tfb.Softplus())).sample(
+            (n_chain, num_topic))
+        # phi = tf.transpose(phi, [0, 1, 2])
+        assert phi.shape[1:] == (num_topic, vocab_size)
 
-    gamma0 = tfd.Gamma(concentration=e0, rate=f0).sample((n_chain,))
-    assert gamma0.shape[1:] == ()
+        gamma0 = tfd.Gamma(concentration=e0, rate=f0).sample((n_chain,))
+        assert gamma0.shape[1:] == ()
 
-    gamma = tfd.Gamma(concentration=gamma0, rate=c0).sample((num_topic,))
-    gamma = tf.transpose(gamma, [1, 0])
-    assert gamma.shape[1:] == (num_topic,)
+        gamma = tfd.Gamma(concentration=gamma0, rate=c0).sample((num_topic,))
+        gamma = tf.transpose(gamma, [1, 0])
+        assert gamma.shape[1:] == (num_topic,)
 
-    theta = tfd.Gamma(concentration=gamma, rate=pn / (1 - pn)).sample((n,))
-    theta = tf.transpose(theta, [1, 2, 0])
-    assert theta.shape[1:] == (num_topic, n)
+        theta = tfd.Gamma(concentration=gamma, rate=(1 - pn) / pn).sample((n,))
+        theta = tf.transpose(theta, [1, 2, 0])
+        assert theta.shape[1:] == (num_topic, n)
 
-    document = tf.random.poisson(lam=tf.matmul(phi, theta, adjoint_a=True), shape=())[0]
+        doc_mean = tf.matmul(phi, theta, adjoint_a=True)
+        if doc_mean.numpy().min() > 3:
+            succ = True
+            break
+
+    if not succ:
+        raise ValueError('Unsuccess model')
+
+    document = tf.random.poisson(lam=doc_mean, shape=())[0]
     document = tf.transpose(document, [1, 0])
     assert document.shape == (n, vocab_size)
 
+    return document
+
+
+if __name__ == '__main__':
+    num_topic = 5
+    vocab_size = 100
+    n = 50
+
+    document = generate_data()
 
     hparams = {'c0': 1.,
                'e0': 1.,
@@ -200,11 +217,11 @@ if __name__ == '__main__':
     pfa = PFAHMCSampler(vocab_size, num_topic, hparams)
 
     n_states = 1000
-    n_burnin = 1000
+    n_burnin = 10000
     pfa.sample_states(document,
                       n_states=n_states,
                       n_burnin=n_burnin,
-                      step_size=0.01)
+                      step_size=0.005)
 
     draw_samples = pfa.predict()
     pred_low, pred_high = np.quantile(draw_samples, [0.025, 0.975], axis=0)
