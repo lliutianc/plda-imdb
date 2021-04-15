@@ -15,11 +15,11 @@ sample_chain = tfp.mcmc.sample_chain
 class PFAHMCSampler:
     param_names = ['gamma0', 'gamma', 'theta', 'phi']
 
-    def __init__(self, vocab_size, num_topic, hparam, seed=1, ):
+    def __init__(self, vocab_size, num_topic, hparam):
         self.num_topic = num_topic
         self.vocab_size = vocab_size
         self.set_hparam(hparam)
-        self.seed = seed
+        # self.seed = seed
         self.init__model()
 
     def init__model(self):
