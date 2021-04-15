@@ -60,24 +60,12 @@ class PFAHMCSampler:
 
     def init_states(self):
         assert self.document is not None
-        n = self.document.shape[0]
+        assert self.model is not None
 
-        phi = tfd.Dirichlet(self.hparam['alpha_vec']).sample((self.num_topic,))
-        assert phi.shape == (self.num_topic, self.vocab_size)
+        state = self.model.sample()
+        state = [state[param] for param in PFAHMCSampler.param_names]
 
-        gamma0 = tf.random.gamma(alpha=self.hparam['e0'],
-                                 beta=self.hparam['f0'], shape=())
-
-        gamma = tf.random.gamma(alpha=gamma0, beta=self.hparam['c0'],
-                                shape=(self.num_topic,))
-        assert gamma.shape == (self.num_topic,)
-
-        beta_theta = self.hparam['pn'] / (1 - self.hparam['pn'])
-        theta = tf.random.gamma(alpha=gamma, beta=beta_theta, shape=(n,))
-        assert theta.shape == (n, self.num_topic)
-
-        # TODO: sparse H
-        return [gamma0, gamma, tf.transpose(theta, [1, 0]), phi]
+        return state
 
     def set_model(self, n):
         self.model = tfd.JointDistributionNamed(dict(
@@ -100,18 +88,15 @@ class PFAHMCSampler:
             document=lambda theta, phi: tfd.Independent(
                 tfd.Poisson(rate=tf.matmul(theta, phi, adjoint_a=True)), 1)))
 
-    def log_prob(self, params):
-        gamma0, gamma, theta, phi = params
-        states = {'gamma': gamma,
-                  'gamma0': gamma0,
-                  'theta': theta,
-                  'phi': phi,
-                  'document': self.document}
+    def log_prob(self, states):
+        states_dict = {'document': self.document}
+        for k, v in zip(PFAHMCSampler.param_names, states):
+            states_dict[k] = v
 
-        log_prob = self.model.log_prob(states)
+        log_prob = self.model.log_prob(states_dict)
         if tf.math.is_nan(log_prob).numpy().max() is True:
             print(log_prob)
-            self.final_state = params
+            self.final_state = states
             raise ValueError
 
         return tf.reduce_sum(log_prob)
@@ -166,6 +151,7 @@ def generate_data():
     f0 = 0.001
     c0 = 1.
     pn = 0.8
+    n_chain = 1
 
     alpha_vec = tf.fill((vocab_size,), value=1.01)
     alpha_vec = np.cumsum(alpha_vec) / 5.
@@ -216,8 +202,8 @@ if __name__ == '__main__':
                }
     pfa = PFAHMCSampler(vocab_size, num_topic, hparams)
 
-    n_states = 1000
-    n_burnin = 10000
+    n_states = 100
+    n_burnin = 100
     pfa.sample_states(document,
                       n_states=n_states,
                       n_burnin=n_burnin,
