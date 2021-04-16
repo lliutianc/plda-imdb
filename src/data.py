@@ -7,6 +7,8 @@ tfb = tfp.bijectors
 
 
 def generate_data(num_topic, vocab_size, n, partial_depend=True):
+    np.random.seed(1)
+
     e0 = 1
     f0 = 0.001
     c0 = 1.
@@ -31,6 +33,7 @@ def generate_data(num_topic, vocab_size, n, partial_depend=True):
         phi = tfd.Dirichlet(tfp.util.TransformedVariable(alpha_vec, tfb.Softplus())).sample(
             (n_chain, num_topic))
         assert phi.shape[1:] == (num_topic, vocab_size)
+
 
         gamma0 = tfd.Gamma(concentration=e0, rate=f0).sample((n_chain,))
         assert gamma0.shape[1:] == ()
