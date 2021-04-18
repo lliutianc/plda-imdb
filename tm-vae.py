@@ -314,7 +314,7 @@ def run_dirpfa(args):
 
     assert beta_pymc3.shape == (args.n_sample, args.n_topic, args.n_word)
     assert theta_pymc3.shape == (args.n_sample, args.n_te, args.n_topic)
-    assert n_pymc3.shape == (args.n_sample, args.n_te, args.n_topic)
+    assert n_pymc3.shape == (args.n_sample, args.n_te, 1)
 
     beta_mean = beta_pymc3.mean(0)
     theta_mean = theta_pymc3.mean(0)
