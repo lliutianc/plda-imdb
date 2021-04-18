@@ -24,102 +24,12 @@ from encoder import ThetaEncoder, ThetaNEncoder
 from utils import Logger, makedirs
 
 
-def log_probs(model):
-    assert model in ['pfa', 'dirpfa', 'lda']
-
-    if model == 'pfa':
-        def log_prob(beta, theta):
-            """Returns the per-word log-likelihood function for given documents.
-
-            K : number of topics in the model
-            V : number of words (size of vocabulary)
-            D : number of documents (in a mini-batch)
-
-            Parameters
-            ----------
-            beta : tensor (K x V)
-                Word distributions.
-            theta : tensor (D x K)
-                Topic distributions for documents.
-            """
-
-            def ll_docs_f(docs):
-                dixs, vixs = docs.nonzero()
-                vfreqs = docs[dixs, vixs]
-                ll_docs = ((theta[dixs] + beta.T[vixs]).sum(1) + vfreqs * pmmath.logsumexp(
-                    tt.log(theta[dixs]) + tt.log(beta.T[vixs]),
-                    axis=1).ravel() - pm.distributions.special.gammaln(vfreqs + 1))
-
-                ll_docs = (vfreqs * (
-                    pmmath.logsumexp(tt.log(theta[dixs]) + tt.log(beta.T[vixs]), axis=1).ravel()) - tt.exp(
-                    pmmath.logsumexp(tt.log(theta[dixs]) + tt.log(beta.T[vixs], ),
-                                     axis=1)).ravel() - pm.distributions.special.gammaln(vfreqs + 1))
-
-                return tt.sum(ll_docs) / (tt.sum(vfreqs) + 1e-9)
-            return ll_docs_f
-
-    if model == 'dirpfa':
-        def log_prob(beta, theta, n):
-            """Returns the log-likelihood function for given documents.
-
-            K : number of topics in the model
-            V : number of words (size of vocabulary)
-            D : number of documents (in a mini-batch)
-
-            Parameters
-            ----------
-            beta : tensor (K x V)
-                Word distributions.
-            theta : tensor (D x K)
-                Topic distributions for documents.
-            n: tensor (D x 1)
-                Expected lengths of each documents
-            """
-
-            def ll_docs_f(docs):
-                dixs, vixs = docs.nonzero()
-                vfreqs = docs[dixs, vixs]
-                ll_docs = (vfreqs * (pmmath.logsumexp(tt.log(theta[dixs]) + tt.log(beta.T[vixs]),
-                                                      axis=1).ravel() + tt.log(
-                    n[dixs]).ravel()) - tt.exp(
-                    pmmath.logsumexp(tt.log(theta[dixs]) + tt.log(beta.T[vixs], ),
-                                     axis=1)).ravel() * n[
-                               dixs].ravel() - pm.distributions.special.gammaln(vfreqs + 1)
-
-                )
-                return tt.sum(ll_docs) / (tt.sum(vfreqs) + 1e-9)
-            return ll_docs_f
-
-    if model == 'lda':
-        def log_prob(beta, theta):
-            """Returns the log-likelihood function for given documents.
-
-            K : number of topics in the model
-            V : number of words (size of vocabulary)
-            D : number of documents (in a mini-batch)
-
-            Parameters
-            ----------
-            beta : tensor (K x V)
-                Word distributions.
-            theta : tensor (D x K)
-                Topic distributions for documents.
-            """
-
-            def ll_docs_f(docs):
-                dixs, vixs = docs.nonzero()
-                vfreqs = docs[dixs, vixs]
-                ll_docs = (vfreqs * pmmath.logsumexp(tt.log(theta[dixs]) + tt.log(beta.T[vixs]),
-                                                     axis=1).ravel())
-
-                return tt.sum(ll_docs) / (tt.sum(vfreqs) + 1e-9)
-            return ll_docs_f
-
-    return log_prob
+def prepare_sparse_matrix_nonlabel(n_train, n_test, max_vocab_size):
+    return prepare_sparse_matrix(n_train, n_test, max_vocab_size)[:3]
 
 
 def run_lda(args):
-    tf_vectorizer, docs_tr, docs_te = prepare_sparse_matrix(args.n_tr, args.n_te, args.n_word)
+    tf_vectorizer, docs_tr, docs_te = prepare_sparse_matrix_nonlabel(args.n_tr, args.n_te, args.n_word)
     feature_names = tf_vectorizer.get_feature_names()
     doc_tr_minibatch = pm.Minibatch(docs_tr.toarray(), args.bsz)
     doc_tr = shared(docs_tr.toarray()[:args.bsz])
@@ -210,7 +120,7 @@ def run_lda(args):
 
 
 def run_pfa(args):
-    tf_vectorizer, docs_tr, docs_te = prepare_sparse_matrix(args.n_tr, args.n_te, args.n_word)
+    tf_vectorizer, docs_tr, docs_te = prepare_sparse_matrix_nonlabel(args.n_tr, args.n_te, args.n_word)
     feature_names = tf_vectorizer.get_feature_names()
     doc_tr_minibatch = pm.Minibatch(docs_tr.toarray(), args.bsz)
     doc_tr = shared(docs_tr.toarray()[:args.bsz])
@@ -314,7 +224,7 @@ def run_pfa(args):
 
 
 def run_dirpfa(args):
-    tf_vectorizer, docs_tr, docs_te = prepare_sparse_matrix(args.n_tr, args.n_te, args.n_word)
+    tf_vectorizer, docs_tr, docs_te = prepare_sparse_matrix_nonlabel(args.n_tr, args.n_te, args.n_word)
     feature_names = tf_vectorizer.get_feature_names()
     doc_tr_minibatch = pm.Minibatch(docs_tr.toarray(), args.bsz)
     doc_tr = shared(docs_tr.toarray()[:args.bsz])
@@ -353,8 +263,8 @@ def run_dirpfa(args):
 
     with pm.Model() as model:
         n = Gamma("n",
-                  alpha=pm.floatX(3. * np.ones((args.bsz, 1))),
-                  beta=pm.floatX(1 / 30 * np.ones((args.bsz, 1))), shape=(args.bsz, 1),
+                  alpha=pm.floatX(10. * np.ones((args.bsz, 1))),
+                  beta=pm.floatX(0.1 * np.ones((args.bsz, 1))), shape=(args.bsz, 1),
                   total_size=args.n_tr)
 
         beta = Dirichlet("beta",
