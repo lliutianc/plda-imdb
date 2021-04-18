@@ -109,7 +109,7 @@ def run_lda(args):
     theta_mean = theta_pymc3.mean(0)
 
     pred_rate = theta_mean.dot(beta_mean)
-    pp_test = (test * pred_rate).sum(1) / test_n
+    pp_test = (test * np.log(pred_rate)).sum(1) / test_n
 
     posteriors = { 'theta': theta_pymc3, 'beta': beta_pymc3,}
 
