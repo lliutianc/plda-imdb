@@ -437,7 +437,7 @@ if __name__ == '__main__':
     parser.add_argument('--bsz', type=int, default=128)
     parser.add_argument('--n_iter', type=int, default=5000)
 
-    parser.add_argument('--model', type=str, choice=['pfa', 'dirpfa', 'lda'])
+    parser.add_argument('--model', type=str, choices=['pfa', 'dirpfa', 'lda'])
     parser.add_argument('--n_sample', type=int, default=1000, help='posterior samples to draw')
     parser.add_argument('--n_top_word', type=int, default=10, help='Top words from each topic')
 
