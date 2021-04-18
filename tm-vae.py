@@ -181,39 +181,31 @@ def run_lda(args):
                   total_grad_norm_constraint=200,
                   more_replacements={ doc_tr: doc_tr_minibatch }, )
 
-    save_elbo(approx.hist)
-
     doc_tr.set_value(docs_tr.toarray())
-    samples = pm.sample_approx(approx, draws=args.n_sample)
-
-    beta_pymc3 = samples["beta"].mean(axis=0)
-    log_top_words(beta_pymc3, feature_names, n_top_words=args.n_top_word)
-
     inp = tt.matrix(dtype="int64")
-
     sample_vi_theta = theano.function([inp],
         approx.sample_node(approx.model.theta, args.n_sample, more_replacements={doc_tr: inp}), )
-
-    def transform_pymc3(docs):
-        return sample_vi_theta(docs)
-
-    pymc3_test = transform_pymc3(docs_te.toarray())
-    theta_pymc3 = pymc3_test[0]
 
     test = docs_te.toarray()
     test_n = test.sum(1)
 
+    beta_pymc3 = pm.sample_approx(approx, draws=args.n_sample)['beta']
+    theta_pymc3 = sample_vi_theta(test)
+
+    assert beta_pymc3.shape == (args.n_sample, args.n_topic, args.n_word)
+    assert theta_pymc3.shape == (args.n_sample, args.n_te, args.n_topic)
+
+    beta_mean = beta_pymc3.mean(0)
     theta_mean = theta_pymc3.mean(0)
-    pred_rate = theta_mean.dot(beta_pymc3)
+
+    pred_rate = theta_mean.dot(beta_mean)
     pp_test = (test * pred_rate).sum(1) / test_n
 
+    posteriors = { 'theta': theta_pymc3, 'beta': beta_pymc3,}
+
+    log_top_words(beta_pymc3.mean(0), feature_names, n_top_words=args.n_top_word)
+    save_elbo(approx.hist)
     save_pp(pp_test)
-
-    posteriors = {
-        'theta': theta_pymc3,
-        'beta': beta_pymc3,
-        }
-
     save_draws(posteriors)
 
 
@@ -276,9 +268,7 @@ def run_pfa(args):
     encoder = ThetaEncoder(n_words=args.n_word, n_hidden=100, n_topics=args.n_topic + 1)
     local_RVs = OrderedDict([(theta, encoder.encode(doc_tr))])
     encoder_params = encoder.get_params()
-
     s = shared(args.lr)
-
     def reduce_rate(a, h, i):
         s.set_value(args.lr / ((i / args.bsz) + 1) ** 0.7)
 
@@ -287,42 +277,39 @@ def run_pfa(args):
         approx.scale_cost_to_minibatch = False
         inference = pm.KLqp(approx)
 
-    inference.fit(args.n_iter, callbacks=[reduce_rate, ], obj_optimizer=pm.adam(learning_rate=s),
-                  more_obj_params=encoder_params, total_grad_norm_constraint=200,
+    inference.fit(args.n_iter,
+                  callbacks=[reduce_rate, ],
+                  obj_optimizer=pm.adam(learning_rate=s),
+                  more_obj_params=encoder_params,
+                  total_grad_norm_constraint=200,
                   more_replacements={ doc_tr: doc_tr_minibatch }, )
 
-    save_elbo(approx.hist)
-
     doc_tr.set_value(docs_tr.toarray())
-    samples = pm.sample_approx(approx, draws=args.n_sample)
-
-    beta_pymc3 = samples["beta"].mean(axis=0)
-    log_top_words(beta_pymc3, feature_names, n_top_words=args.n_top_word)
 
     inp = tt.matrix(dtype="int64")
-
-    sample_vi_theta = theano.function([inp], approx.sample_node(approx.model.theta, args.n_sample,
-                                                                more_replacements={ doc_tr: inp
-                                                                                    }), )
-
-    def transform_pymc3(docs):
-        return sample_vi_theta(docs)
-
-    pymc3_test = transform_pymc3(docs_te.toarray())
-    theta_pymc3 = pymc3_test[0]
+    sample_vi_theta = theano.function([inp],
+        approx.sample_node(approx.model.theta, args.n_sample, more_replacements={doc_tr: inp}), )
 
     test = docs_te.toarray()
     test_n = test.sum(1)
 
+    beta_pymc3 = pm.sample_approx(approx, draws=args.n_sample)['beta']
+    theta_pymc3 = sample_vi_theta(test)
+
+    assert beta_pymc3.shape == (args.n_sample, args.n_topic, args.n_word)
+    assert theta_pymc3.shape == (args.n_sample, args.n_te, args.n_topic)
+
+    beta_mean = beta_pymc3.mean(0)
     theta_mean = theta_pymc3.mean(0)
-    pred_rate = theta_mean.dot(beta_pymc3)
+
+    pred_rate = theta_mean.dot(beta_mean)
     pp_test = (test * np.log(pred_rate) - pred_rate - sc.gammaln(test + 1)).sum(1) / test_n
 
+    posteriors = { 'theta': theta_pymc3, 'beta': beta_pymc3,}
+
+    log_top_words(beta_pymc3.mean(0), feature_names, n_top_words=args.n_top_word)
+    save_elbo(approx.hist)
     save_pp(pp_test)
-
-    posteriors = { 'theta': theta_pymc3, 'beta': beta_pymc3,
-        }
-
     save_draws(posteriors)
 
 
@@ -381,60 +368,56 @@ def run_dirpfa(args):
 
         doc = pm.DensityDist("doc", log_prob(beta, theta, n), observed=doc_tr)
 
-        encoder = ThetaNEncoder(n_words=args.n_word, n_hidden=100, n_topics=args.n_topic)
-        local_RVs = OrderedDict([(theta, encoder.encode(doc_tr))])
-        encoder_params = encoder.get_params()
+    encoder = ThetaNEncoder(n_words=args.n_word, n_hidden=100, n_topics=args.n_topic)
+    local_RVs = OrderedDict([(theta, encoder.encode(doc_tr))])
+    encoder_params = encoder.get_params()
+    s = shared(args.lr)
+    def reduce_rate(a, h, i):
+        s.set_value(args.lr / ((i / args.bsz) + 1) ** 0.7)
 
-        s = shared(args.lr)
+    with model:
+        approx = pm.MeanField(local_rv=local_RVs)
+        approx.scale_cost_to_minibatch = False
+        inference = pm.KLqp(approx)
 
-        def reduce_rate(a, h, i):
-            s.set_value(args.lr / ((i / args.bsz) + 1) ** 0.7)
+    inference.fit(args.n_iter, callbacks=[reduce_rate, ],
+                  obj_optimizer=pm.adam(learning_rate=s), more_obj_params=encoder_params,
+                  total_grad_norm_constraint=200,
+                  more_replacements={ doc_tr: doc_tr_minibatch }, )
 
-        with model:
-            approx = pm.MeanField(local_rv=local_RVs)
-            approx.scale_cost_to_minibatch = False
-            inference = pm.KLqp(approx)
+    doc_tr.set_value(docs_tr.toarray())
 
-        inference.fit(args.n_iter, callbacks=[reduce_rate, ],
-                      obj_optimizer=pm.adam(learning_rate=s), more_obj_params=encoder_params,
-                      total_grad_norm_constraint=200,
-                      more_replacements={ doc_tr: doc_tr_minibatch }, )
+    inp = tt.matrix(dtype="int64")
+    sample_vi_theta = theano.function([inp],
+        approx.sample_node(approx.model.theta, args.n_sample, more_replacements={ doc_tr: inp
+                                                                                    }), )
+    sample_vi_n = theano.function([inp],
+        approx.sample_node(approx.model.n, args.n_sample, more_replacements={ doc_tr: inp }))
 
-        save_elbo(approx.hist)
+    test = docs_te.toarray()
+    test_n = test.sum(1)
 
-        doc_tr.set_value(docs_tr.toarray())
-        samples = pm.sample_approx(approx, draws=args.n_sample)
+    beta_pymc3 = pm.sample_approx(approx, draws=args.n_sample)['beta']
+    theta_pymc3 = sample_vi_theta(test)
+    n_pymc3 = sample_vi_n(test)
 
-        beta_pymc3 = samples["beta"].mean(axis=0)
-        log_top_words(beta_pymc3, feature_names, n_top_words=args.n_top_word)
+    assert beta_pymc3.shape == (args.n_sample, args.n_topic, args.n_word)
+    assert theta_pymc3.shape == (args.n_sample, args.n_te, args.n_topic)
+    assert n_pymc3.shape == (args.n_sample, args.n_te, args.n_topic)
 
-        inp = tt.matrix(dtype="int64")
+    beta_mean = beta_pymc3.mean(0)
+    theta_mean = theta_pymc3.mean(0)
+    n_mean = n_pymc3.mean(0)
 
-        sample_vi_theta = theano.function([inp],
-            approx.sample_node(approx.model.theta, args.n_sample, more_replacements={ doc_tr: inp
-                                                                                        }), )
-        sample_vi_n = theano.function([inp],
-            approx.sample_node(approx.model.n, args.n_sample, more_replacements={ doc_tr: inp }))
+    pred_rate = theta_mean.dot(beta_mean) * n_mean
+    pp_test = (test * np.log(pred_rate) - pred_rate - sc.gammaln(test + 1)).sum(1) / test_n
 
-        def transform_pymc3(docs):
-            return sample_vi_theta(docs), sample_vi_n(docs)
+    posteriors = { 'theta': theta_pymc3, 'beta': beta_pymc3, 'n': n_pymc3}
 
-        pymc3_test = transform_pymc3(docs_te.toarray())
-        theta_pymc3 = pymc3_test[0]
-
-        test = docs_te.toarray()
-        test_n = test.sum(1)
-
-        theta_mean = theta_pymc3.mean(0)
-        pred_rate = theta_mean.dot(beta_pymc3)
-        pp_test = (test * np.log(pred_rate) - pred_rate - sc.gammaln(test + 1)).sum(1) / test_n
-
-        save_pp(pp_test)
-
-        posteriors = { 'theta': theta_pymc3, 'beta': beta_pymc3,
-                       }
-
-        save_draws(posteriors)
+    log_top_words(beta_pymc3.mean(0), feature_names, n_top_words=args.n_top_word)
+    save_elbo(approx.hist)
+    save_pp(pp_test)
+    save_draws(posteriors)
 
 
 run = {'dirpfa': run_dirpfa, 'pfa': run_pfa, 'lda': run_lda}
