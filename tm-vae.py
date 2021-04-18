@@ -85,7 +85,7 @@ def run_lda(args):
         inference = pm.KLqp(approx)
 
     inference.fit(args.n_iter,
-                  callbacks=[reduce_rate, ],
+                  callbacks=[reduce_rate, pm.callbacks.CheckParametersConvergence(diff="absolute")],
                   obj_optimizer=pm.adam(learning_rate=s),
                   more_obj_params=encoder_params,
                   total_grad_norm_constraint=200,
@@ -188,7 +188,7 @@ def run_pfa(args):
         inference = pm.KLqp(approx)
 
     inference.fit(args.n_iter,
-                  callbacks=[reduce_rate, ],
+                  callbacks=[reduce_rate, pm.callbacks.CheckParametersConvergence(diff="absolute")],
                   obj_optimizer=pm.adam(learning_rate=s),
                   more_obj_params=encoder_params,
                   total_grad_norm_constraint=200,
@@ -279,7 +279,7 @@ def run_dirpfa(args):
         doc = pm.DensityDist("doc", log_prob(beta, theta, n), observed=doc_tr)
 
     encoder = ThetaNEncoder(n_words=args.n_word, n_hidden=100, n_topics=args.n_topic)
-    local_RVs = OrderedDict([(theta, encoder.encode(doc_tr))])
+    local_RVs = OrderedDict([(theta, encoder.encode(doc_tr)[0]), (n, encoder.encode(doc_tr)[1])])
     encoder_params = encoder.get_params()
     s = shared(args.lr)
     def reduce_rate(a, h, i):
@@ -290,7 +290,8 @@ def run_dirpfa(args):
         approx.scale_cost_to_minibatch = False
         inference = pm.KLqp(approx)
 
-    inference.fit(args.n_iter, callbacks=[reduce_rate, ],
+    inference.fit(args.n_iter,
+                  callbacks=[reduce_rate, pm.callbacks.CheckParametersConvergence(diff="absolute")],
                   obj_optimizer=pm.adam(learning_rate=s), more_obj_params=encoder_params,
                   total_grad_norm_constraint=200,
                   more_replacements={ doc_tr: doc_tr_minibatch }, )
