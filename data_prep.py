@@ -2,11 +2,15 @@ import re, pickle
 import tarfile
 from smart_open import open
 from sklearn.feature_extraction.text import CountVectorizer
-from nltk.tokenize import word_tokenize
+from nltk.tokenize import word_tokenize, RegexpTokenizer
 from scipy.sparse import save_npz
 
 import nltk
 nltk.download('punkt')
+nltk.download('stopwords')
+
+from nltk.corpus import stopwords
+
 
 IMDB_SOURCE = 'https://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz'
 
@@ -20,15 +24,50 @@ def generate_docs_from_url(url=IMDB_SOURCE):
                     yield member_bytes.decode('utf8', errors='replace')
 
 
-vectorizer = CountVectorizer(
-    tokenizer=word_tokenize,
-    stop_words='english',
-    max_df=0.3,
-    min_df=5
-)
 
-bow = vectorizer.fit_transform(list(generate_docs_from_url())) # (50000, 27918)
 
-save_npz('./imdb_bow.npz', bow)
-with open('./vectorizer.pkl', 'wb') as f:
-    pickle.dump(vectorizer, f)
+    
+STOPS = set(stopwords.words('english'))
+
+def is_stopword(word):
+    VALID = re.compile('^[a-zA-Z]{2,}$')
+    return word in STOPS or len(word) <= 2 or not bool(VALID.match(word))
+
+    
+def analyzer(tokenizer):
+    def analyze(doc):
+        doc_list = tokenizer(doc.lower().replace('\\', ''))
+        return [word for word in doc_list if not is_stopword(word)]
+    return analyze
+    
+    
+def prepare_sparse_matrix(n_samples, max_vocab_size, max_df=.5, min_df=10, tokenize=None):
+    tokenize = tokenize or RegexpTokenizer('\w+|\$[\d\.]+|\S+').tokenize
+    
+    analyze = analyzer(tokenize)
+    
+    tf_vectorizer = CountVectorizer(
+        analyzer=analyze,
+        max_df=max_df,
+        min_df=min_df,
+        max_features=max_vocab_size,
+    )
+    
+    docs_tr = tf_vectorizer.fit_transform(list(generate_docs_from_url())[:n_samples]) # (50000, 27918)tf_vectorizer
+    return tf_vectorizer, docs_tr
+    
+    
+if __name__ == '__main__':
+    
+    vectorizer = CountVectorizer(
+        tokenizer=word_tokenize,
+        stop_words='english',
+        max_df=0.3,
+        min_df=5
+    )
+
+    bow = vectorizer.fit_transform(list(generate_docs_from_url())) # (50000, 27918)
+
+    save_npz('./imdb_bow.npz', bow)
+    with open('./vectorizer.pkl', 'wb') as f:
+        pickle.dump(vectorizer, f)
