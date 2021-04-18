@@ -369,11 +369,11 @@ if __name__ == '__main__':
 
     def save_pp(pps):
         with open(os.path.join(result_path, 'pp.pkl'), 'wb') as f:
-            pickle.dump(pps)
+            pickle.dump(pps, f)
 
     def save_draws(draws):
         with open(os.path.join(result_path, 'draws.pkl'), 'wb') as f:
-            pickle.dump(draws)
+            pickle.dump(draws, f)
 
     run[args.model](args)
 
