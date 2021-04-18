@@ -41,7 +41,7 @@ def analyzer(tokenizer):
     return analyze
     
     
-def prepare_sparse_matrix(n_samples, max_vocab_size, max_df=.5, min_df=10, tokenize=None):
+def prepare_sparse_matrix(n_train, n_test, max_vocab_size, max_df=.5, min_df=10, tokenize=None):
     tokenize = tokenize or RegexpTokenizer('\w+|\$[\d\.]+|\S+').tokenize
     
     analyze = analyzer(tokenize)
@@ -53,8 +53,10 @@ def prepare_sparse_matrix(n_samples, max_vocab_size, max_df=.5, min_df=10, token
         max_features=max_vocab_size,
     )
     
-    docs_tr = tf_vectorizer.fit_transform(list(generate_docs_from_url())[:n_samples]) # (50000, 27918)tf_vectorizer
-    return tf_vectorizer, docs_tr
+    docs = list(generate_docs_from_url())[:(n_train + n_test)]
+    docs_tr = tf_vectorizer.fit_transform(docs[:n_train])
+    docs_te = tf_vectorizer.transform(docs[n_train:])
+    return tf_vectorizer, docs_tr, docs_te
     
     
 if __name__ == '__main__':
