@@ -33,7 +33,7 @@ vectorizer = CountVectorizer(
 )
 
 bow = vectorizer.fit_transform(list(generate_docs_from_url()))  # (50000, 27918)
-labels = list(map(lambda x: '1' if x == 'pos' else '0', labels))
+labels = list(map(lambda x: '1\n' if x == 'pos' else '0\n', labels))
 with open("./labels.txt", "w") as f:
     f.writelines(labels)
 
