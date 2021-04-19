@@ -61,11 +61,11 @@ def run_lda(args):
 
     with pm.Model() as model:
         theta = Dirichlet("theta",
-                          a=pm.floatX((1.0 / args.n_topic) * np.ones((args.bsz, args.n_topic))),
+                          a=pm.floatX((10. / args.n_topic) * np.ones((args.bsz, args.n_topic))),
                           shape=(args.bsz, args.n_topic), total_size=args.n_tr, )
 
         beta = Dirichlet("beta",
-                         a=pm.floatX((1.0 / args.n_topic) * np.ones((args.n_topic, args.n_word))),
+                         a=pm.floatX((1. / args.n_topic) * np.ones((args.n_topic, args.n_word))),
                          shape=(args.n_topic, args.n_word), )
 
         doc = pm.DensityDist("doc", log_prob(beta, theta), observed=doc_tr)
@@ -268,11 +268,11 @@ def run_dirpfa(args):
                   total_size=args.n_tr)
 
         beta = Dirichlet("beta",
-                         a=pm.floatX((1.0 / args.n_topic) * np.ones((args.n_topic, args.n_word))),
+                         a=pm.floatX((1. / args.n_topic) * np.ones((args.n_topic, args.n_word))),
                          shape=(args.n_topic, args.n_word), )
 
         theta = Dirichlet("theta",
-                          a=pm.floatX((1.0 / args.n_topic) * np.ones((args.bsz, args.n_topic))),
+                          a=pm.floatX((10. / args.n_topic) * np.ones((args.bsz, args.n_topic))),
                           shape=(args.bsz, args.n_topic),
                           total_size=args.n_tr, )
 
