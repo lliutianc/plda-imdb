@@ -60,13 +60,13 @@ def run_lda(args):
         return ll_docs_f
 
     with pm.Model() as model:
-        theta = Dirichlet("theta",
-                          a=pm.floatX((10. / args.n_topic) * np.ones((args.bsz, args.n_topic))),
-                          shape=(args.bsz, args.n_topic), total_size=args.n_tr, )
-
         beta = Dirichlet("beta",
                          a=pm.floatX((1. / args.n_topic) * np.ones((args.n_topic, args.n_word))),
                          shape=(args.n_topic, args.n_word), )
+
+        theta = Dirichlet("theta",
+                          a=pm.floatX((10. / args.n_topic) * np.ones((args.bsz, args.n_topic))),
+                          shape=(args.bsz, args.n_topic), total_size=args.n_tr, )
 
         doc = pm.DensityDist("doc", log_prob(beta, theta), observed=doc_tr)
 
@@ -109,7 +109,7 @@ def run_lda(args):
     theta_mean = theta_pymc3.mean(0)
 
     pred_rate = theta_mean.dot(beta_mean)
-    pp_test = (test * pred_rate).sum(1) / test_n
+    pp_test = (test * np.log(pred_rate)).sum(1) / test_n
 
     posteriors = { 'theta': theta_pymc3, 'beta': beta_pymc3,}
 
