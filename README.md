@@ -5,3 +5,5 @@ This project implements Latent Dirichlet Allocation (LDA), a shallow Poisson Fac
 The implmentation uses the autoencoding variational Bayes to learn the approximation of topic distribution/intensity for each document and is updated with mini-batch data.
 
 The implementation is based on PyMC3 and Theano libaries.
+
+HMC based implementations on word count matrices are also included but may be buggy. They are stored under the `src/old` folders and are based on `tensorflow_probability`.
